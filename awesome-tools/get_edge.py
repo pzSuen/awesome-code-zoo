@@ -18,6 +18,8 @@ if __name__ == "__main__":
     img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
     tm = torch.from_numpy(img).unsqueeze(0).unsqueeze(0)
 
-    edge = get_edges(tm)
-    plt.imshow(edge.squeeze())
+    edge = get_edges(tm).squeeze()
+    plt.imshow(edge)
+    # print(edge.shape)
+    plt.imsave("./TCGA-73-4668-01Z-00-DX1_004_edge.png",edge)
     plt.show()
