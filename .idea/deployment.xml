@@ -5,7 +5,7 @@
       <paths name="pzsuen@192.168.1.133:22">
         <serverdata>
           <mappings>
-            <mapping deploy="/Code/awesome-code-zoo" local="$PROJECT_DIR$" web="/" />
+            <mapping deploy="/Code/AwesomeCodeZoo" local="$PROJECT_DIR$" web="/" />
           </mappings>
         </serverdata>
       </paths>
