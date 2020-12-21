@@ -39,7 +39,7 @@ if __name__ == "__main__":
 
     time_start = time.time()
 
-    path = './TCGA-73-4668-01Z-00-DX1_004.png'
+    path = '../images/TCGA-73-4668-01Z-00-DX1_004.png'
     img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
     tm = torch.from_numpy(img).unsqueeze(0).unsqueeze(0)
 

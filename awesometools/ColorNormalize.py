@@ -16,4 +16,4 @@ if __name__ == '__main__':
     ref_image_fname = './color_norm/TCGA-SX-A7SR-01Z-00-DX1_2.png'
     target_image_fname = './color_norm/TCGA-P4-AAVK-01Z-00-DX1_2.png'
     _ = color_normalize(ref_image_fname,target_image_fname,save_dist='./color_norm/TCGA-P4-AAVK-01Z-00-DX1_2_normalized.png')
-
+    
