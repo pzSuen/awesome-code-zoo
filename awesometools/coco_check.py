@@ -29,6 +29,7 @@ image_dir = '/home/pzsuen/MoNuSAC/patches/images'
 
 coco = COCO(annotation_path)
 print(coco.getCatIds())
+print(sorted(coco.getAnnIds()))
 print(len(coco.getImgIds()))
 print(len(coco.getAnnIds()))
 print(coco.getImgIds())
@@ -44,7 +45,7 @@ img_id = ['482', '1231']
 coco_img = coco.getImgIds(img_id)
 print(coco_img)
 ci = coco.loadImgs(coco_img)
-img = io.imread(os.path.join(image_dir, ci[1]['file_name']))
+img = io.imread(os.path.join(image_dir, ci[0]['file_name']))
 
 # annIds = coco.getAnnIds(imgIds=img_id, catIds=[1]) # 482
 annIds = coco.getAnnIds(imgIds=img_id, catIds=[4]) # 1231
@@ -53,6 +54,9 @@ print(annIds)
 print(len(annIds))
 
 anns = coco.loadAnns(annIds)
+plt.subplot(121)
+plt.imshow(img)
+plt.subplot(122)
 plt.imshow(img)
 coco.showAnns(anns)
 plt.show()

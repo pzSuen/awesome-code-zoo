@@ -49,7 +49,8 @@ def convert2coco(image_fnames, is_train=True):
         "file_name": [],
         "height": 480,
         "width": 480,
-        "id": []
+        "id": [],
+        "coco_url": ''
     }
     images = []
 
@@ -78,12 +79,14 @@ def convert2coco(image_fnames, is_train=True):
         curr_image["id"] = image_id
         curr_image["height"] = h
         curr_image["width"] = w
+        curr_image["coco_url"] = image_id
         images.append(curr_image)
 
         update_contours = []
         update_bboxs = []
         update_areas = []
         update_category = []
+        update_id = []
 
         curr_image_classes = os.listdir(cell_root)
         for cic in curr_image_classes:  # 所有类别
@@ -98,29 +101,32 @@ def convert2coco(image_fnames, is_train=True):
                 # plt.imshow(mask,alpha=0.5)
                 # plt.show()
                 contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-                contour = contours[0]
-                x1 = np.min(contour[:, :, 0])
-                y1 = np.min(contour[:, :, 1])
-                x2 = np.max(contour[:, :, 0])
-                y2 = np.max(contour[:, :, 1])
-                if (x2 - x1) == 0 or (y2 - y1) == 0:
-                    continue
+                for contour in contours:  # 防止同一图像多个cell
+                    x1 = np.min(contour[:, :, 0])
+                    y1 = np.min(contour[:, :, 1])
+                    x2 = np.max(contour[:, :, 0])
+                    y2 = np.max(contour[:, :, 1])
+                    if (x2 - x1) == 0 or (y2 - y1) == 0:
+                        continue
 
-                update_bboxs.append([x1, y1, (x2 - x1), (y2 - y1)])
-                update_areas.append((x2 - x1) * (y2 - y1))
-                update_contours.append(contour.squeeze(1).flatten().tolist())
-                update_category.append(CELL_CLASSES[cic])
+                    update_bboxs.append([x1, y1, (x2 - x1), (y2 - y1)])
+                    update_areas.append((x2 - x1) * (y2 - y1))
+                    update_contours.append(contour.squeeze(1).flatten().tolist())
+                    update_category.append(CELL_CLASSES[cic])
+                    update_id.append(anno_id)
 
-        for (seg, bbox, area, cate) in zip(update_contours, update_bboxs, update_areas, update_category):
+                    anno_id += 1
+
+        for (seg, bbox, area, cate, aid) in zip(update_contours, update_bboxs, update_areas, update_category,
+                                                update_id):
             curr_annotation["segmentation"] = [seg]
             curr_annotation["bbox"] = list(map(int, bbox))
             curr_annotation["area"] = str(area)
             curr_annotation["image_id"] = image_id
-            curr_annotation["id"] = str(anno_id)
+            curr_annotation["id"] = aid
             curr_annotation["category_id"] = cate
             annotations.append(curr_annotation)
             curr_annotation = curr_annotation.copy()
-            anno_id += 1
 
         curr_image = curr_image.copy()
         # image_id += 1
@@ -128,13 +134,14 @@ def convert2coco(image_fnames, is_train=True):
     coco["images"] = images
     coco["annotations"] = annotations
 
-    print(coco)
+    # print(coco)
     # with open("/home/tikboa/306_server_work/DSB2018/annotations/val.json", 'w') as f:
-    print("There are are {} cells.".format(anno_id))
     if is_train:
+        print("There are are {} cells in train set.".format(anno_id))
         with open(os.path.join(ROOT, "train.json"), 'w') as f:
             json.dump(coco, f)
     else:
+        print("There are are {} cells in validation set.".format(anno_id))
         with open(os.path.join(ROOT, "val.json"), 'w') as f:
             json.dump(coco, f)
 
@@ -147,10 +154,10 @@ if __name__ == '__main__':
     # CELL_PATH = os.path.join(ROOT, 'cells')
 
     image_fnames = os.listdir(IMAGE_PATH)  # next(os.walk(IMAGE_PATH))[1]
-    train_fnames, val_fnames, _, _ = train_test_split(image_fnames, range(len(image_fnames)), test_size=0.02,
+    train_fnames, val_fnames, _, _ = train_test_split(image_fnames, range(len(image_fnames)), test_size=0.15,
                                                       random_state=2020,
                                                       shuffle=True)
-    print(len(image_fnames), len(train_fnames), len(val_fnames))
+    print("All: {}, Train: {}, Val: {}".format(len(image_fnames), len(train_fnames), len(val_fnames)))
 
-    # convert2coco(train_fnames, True)
+    convert2coco(train_fnames, True)
     convert2coco(val_fnames, False)
