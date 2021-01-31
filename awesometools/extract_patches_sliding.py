@@ -9,8 +9,9 @@ import numpy as np
 from tqdm.auto import tqdm
 import cv2
 import random
-
+from sklearn.model_selection import train_test_split
 import warnings
+from awesometools.single2coco import convert2coco
 
 warnings.filterwarnings('ignore')
 
@@ -25,6 +26,7 @@ def create_directory(directory):
     '''
     if not os.path.exists(directory):
         os.makedirs(directory)
+        # os.mkdir(directory)
 
 
 def pad(img, pad_size=96):
@@ -188,7 +190,7 @@ def show_image_mask_5class(image, mask):
     plt.show()
 
 
-if __name__ == "__main__":
+def generate_patches_and_select():
     # label_map = {'Epithelial': 1,
     #              'Lymphocyte': 2,
     #              'Macrophage': 4,
@@ -417,3 +419,263 @@ if __name__ == "__main__":
                     # create_directory(os.path.join(CELLS_DEST, str(ct), '1'.png))
 
                 ct += 1
+
+
+def generate_patches_from_1image(img_fname, IMAGE_SOURCE, MASK_SOURCE, CELLS_SOURCE, IMAGE_DEST, MASK_DEST, CELL_DEST,
+                                 PATCH_SIZE=(256, 256), STEP=128, THRESHOLD=0.1):
+    # Create destination folders
+    create_directory(IMAGE_DEST)
+    create_directory(MASK_DEST)
+    create_directory(CELL_DEST)
+
+    # print(img_path, gt_path)
+    # img_path = 'TCGA-A2-A0ES-01Z-00-DX1_2.png'
+    # gt_path = 'TCGA-A2-A0ES-01Z-00-DX1_2.png'
+    patient_case_id = img_fname.split('.')[0]
+    print(patient_case_id)
+
+    if len(patient_case_id.split('_')) == 2:  # TCGA-55-1594-01Z-00-DX1_001.png
+        patient_id = patient_case_id.split('_')[0]
+        case_id = patient_case_id.split('_')[1]
+    else:  # TCGA-55-1594-01Z-00-DX1-001.png
+        patient_id = '-'.join(patient_case_id.split('-')[:-1])
+        case_id = patient_case_id.split('-')[-1]
+    # print("######################################################")
+    # print(patient_id, case_id)
+    new_patient_case_id = '_'.join([patient_id, case_id])
+
+    # cell source path
+    cell_root = os.path.join(CELLS_SOURCE, patient_id, patient_case_id)
+
+    cell_classes = ('Epithelial', 'Macrophage', 'Neutrophil', 'Lymphocyte')
+    all_cell_dict = dict()
+    # 遍历每个类别
+    for cls in cell_classes:
+        cell_path = os.path.join(cell_root, cls)
+        if os.path.exists(cell_path):
+            cell_fnames = glob(os.path.join(cell_path, '*.png'))
+            if len(cell_fnames) > 0:
+                all_cells = []
+                # 遍历该类别下所有细胞
+                for cf in cell_fnames:
+                    cell = read_nuclei(cf)
+                    all_cells.append(cell)
+                all_cells = np.array(all_cells)
+
+                all_cell_dict[cls] = all_cells
+
+    # Read image and ground truth
+    image = skimage.io.imread(os.path.join(IMAGE_SOURCE, img_fname))
+    gt = skimage.io.imread(os.path.join(MASK_SOURCE, img_fname))
+
+    # # Extract patches
+    img_patches = extract_patches(image, STEP, PATCH_SIZE)
+    gt_patches = extract_patches(gt, STEP, PATCH_SIZE)
+    cell_patches_dict = dict()
+    for k, v in all_cell_dict.items():
+        # print(k, v.shape)
+        # cell_patches = None
+        v = v.transpose((1, 2, 0))
+        # print(v.shape)
+        cell_patches = extract_patches(v, STEP, PATCH_SIZE)
+        # print(cell_patches.shape)
+        cell_patches_dict[k] = cell_patches
+
+    ct = 0
+    for i in range(len(img_patches)):
+        # for im, msk,cpd in zip(img_patches, gt_patches,cell_patches_dict):
+
+        patch_id = new_patient_case_id + '_' + str(ct)
+        im = img_patches[i]
+        msk = gt_patches[i]
+
+        # Threshold
+        if np.mean(msk) < THRESHOLD:
+            pass
+
+        else:
+
+            # Save image patch
+            save_nuclei(IMAGE_DEST + patch_id + '.png', im)
+            # Save mask patch
+            save_nuclei(MASK_DEST + patch_id + ".png", msk)
+            # Save cell patch
+            for k, v in cell_patches_dict.items():
+                this_cell_path = os.path.join(CELL_DEST, patch_id, k)
+                cell_masks = v[i]
+                cell_masks = cell_masks.transpose(2, 0, 1)
+                ci = 1
+                for cm in cell_masks:
+                    # if new_patient_case_id == 'TCGA-V1-A9O9-01Z-00-DX1_3':
+                    #     print(np.sum(cm))
+                    if np.sum(cm) > 0:
+                        create_directory(this_cell_path)
+                        save_nuclei(os.path.join(this_cell_path, str(ci) + '.png'), cm)
+                        ci += 1
+
+            ct += 1
+
+
+def select_images_and_generate_patches():
+    # label_map = {'Epithelial': 1,
+    #              'Lymphocyte': 2,
+    #              'Macrophage': 4,
+    #              'Neutrophil': 3,
+    #              }
+
+    label_map = {'Epithelial': 1, 'Macrophage': 2, 'Neutrophil': 3, 'Lymphocyte': 4}
+    # Root directory of the project
+    ROOT_DIR = os.path.abspath("/home/pzsuen/MoNuSAC/")
+
+    # Directory of images to run detection on
+    IMAGE_SOURCE = os.path.join(ROOT_DIR, "image")
+    MASK_SOURCE = os.path.join(ROOT_DIR, "mask")
+    CELL_SOURCE = os.path.join(ROOT_DIR, "cell_masks")
+
+    # Make new folders
+    """
+    Source File Tree:
+        -- images
+            -- TCGA-UZ-A9PO-01Z-00-DX1_1.png
+            -- TCGA-UZ-A9PO-01Z-00-DX1_2.png
+            -- ......
+        -- masks
+            -- TCGA-UZ-A9PO-01Z-00-DX1_1.png
+            -- TCGA-UZ-A9PO-01Z-00-DX1_2.png
+            -- ......
+        -- cells
+            -- TCGA-UZ-A9PO-01Z-00-DX1_1
+                -- Epithelial
+                    -- 1.png
+                    -- 2.png
+                    -- ......
+                -- Macrophage
+                -- Neutrophil
+                -- Lymphocyte
+            -- TCGA-UZ-A9PO-01Z-00-DX1_2
+                -- Epithelial
+                -- Macrophage
+                -- Neutrophil
+                -- Lymphocyte
+    Destination File Tree:
+        -- patches
+            -- images
+                -- TCGA-UZ-A9PO-01Z-00-DX1_1.png
+                -- TCGA-UZ-A9PO-01Z-00-DX1_2.png
+                -- ......
+            -- masks
+                -- TCGA-UZ-A9PO-01Z-00-DX1_1.png
+                -- TCGA-UZ-A9PO-01Z-00-DX1_2.png
+                -- ......
+            -- cells
+                -- TCGA-UZ-A9PO-01Z-00-DX1_1
+                    -- Epithelial
+                        -- 1.png
+                        -- 2.png
+                        -- ......
+                    -- Macrophage
+                    -- Neutrophil
+                    -- Lymphocyte
+                -- TCGA-UZ-A9PO-01Z-00-DX1_2
+                    -- Epithelial
+                    -- Macrophage
+                    -- Neutrophil
+                    -- Lymphocyte
+
+    """
+    """
+    Source File Tree:
+        -- images
+            -- TCGA-UZ-A9PO-01Z-00-DX1_1.png
+            -- TCGA-UZ-A9PO-01Z-00-DX1_2.png
+            -- ......
+        -- masks
+            -- TCGA-UZ-A9PO-01Z-00-DX1_1.png
+            -- TCGA-UZ-A9PO-01Z-00-DX1_2.png
+            -- ......
+        -- cells
+            -- TCGA-UZ-A9PO-01Z-00-DX1_1
+                -- Epithelial
+                    -- 1.png
+                    -- 2.png
+                    -- ......
+                -- Macrophage
+                -- Neutrophil
+                -- Lymphocyte
+            -- TCGA-UZ-A9PO-01Z-00-DX1_2
+                -- Epithelial
+                -- Macrophage
+                -- Neutrophil
+                -- Lymphocyte
+    Destination File Tree:
+        -- patches
+            -- images
+                -- TCGA-UZ-A9PO-01Z-00-DX1_1.png
+                -- TCGA-UZ-A9PO-01Z-00-DX1_2.png
+                -- ......
+            -- masks
+                -- TCGA-UZ-A9PO-01Z-00-DX1_1.png
+                -- TCGA-UZ-A9PO-01Z-00-DX1_2.png
+                -- ......
+            -- cells
+                -- TCGA-UZ-A9PO-01Z-00-DX1_1
+                    -- Epithelial
+                        -- 1.png
+                        -- 2.png
+                        -- ......
+                    -- Macrophage
+                    -- Neutrophil
+                    -- Lymphocyte
+                -- TCGA-UZ-A9PO-01Z-00-DX1_2
+                    -- Epithelial
+                    -- Macrophage
+                    -- Neutrophil
+                    -- Lymphocyte
+
+    """
+
+    # Get all image file names
+    image_fns = sorted(next(os.walk(IMAGE_SOURCE))[2])
+    gt_fns = sorted(next(os.walk(MASK_SOURCE))[2])
+
+    assert len(image_fns) == len(gt_fns), "len(image_fns) != len(gt_fns)"
+
+    # Patch size and stride step
+    PATCH_SIZE = (256, 256)
+    STEP = 128
+    THRESHOLD = 0.1
+
+    # Iterate over all image and masks
+    train_fnames, val_fnames, _, _ = train_test_split(image_fns, range(len(image_fns)), test_size=0.05,
+                                                      random_state=2020, shuffle=True)
+    for img_fname in tqdm(train_fnames):
+        ROOT = os.path.join(ROOT_DIR, "patches_new", "train")
+        IMAGE_DEST = os.path.join(ROOT, "images/")
+        MASK_DEST = os.path.join(ROOT, "masks/")
+        CELL_DEST = os.path.join(ROOT, "cells/")
+        generate_patches_from_1image(img_fname, IMAGE_SOURCE, MASK_SOURCE, CELL_SOURCE, IMAGE_DEST, MASK_DEST,
+                                     CELL_DEST, PATCH_SIZE=(256, 256), STEP=128, THRESHOLD=0.15)
+
+    for img_fname in tqdm(val_fnames):
+        ROOT = os.path.join(ROOT_DIR, "patches_new", "validation")
+        IMAGE_DEST = os.path.join(ROOT, "images/")
+        MASK_DEST = os.path.join(ROOT, "masks/")
+        CELL_DEST = os.path.join(ROOT, "cells/")
+        generate_patches_from_1image(img_fname, IMAGE_SOURCE, MASK_SOURCE, CELL_SOURCE, IMAGE_DEST, MASK_DEST,
+                                     CELL_DEST, PATCH_SIZE=(256, 256), STEP=128, THRESHOLD=0.1)
+
+    # convert train to coco
+    TRAIN_ROOT = os.path.join(ROOT_DIR, "patches_new", "train")
+    TRAIN_IMAGE_DEST = os.path.join(TRAIN_ROOT, "images/")
+    image_fnames = os.listdir(TRAIN_IMAGE_DEST)
+    convert2coco(image_fnames, TRAIN_ROOT, is_train=True)
+
+    # convert test to coco
+    VAL_ROOT = os.path.join(ROOT_DIR, "patches_new", "validation")
+    VAL_IMAGE_DEST = os.path.join(VAL_ROOT, "images/")
+    image_fnames = os.listdir(VAL_IMAGE_DEST)
+    convert2coco(image_fnames, VAL_ROOT, is_train=False)
+
+
+if __name__ == "__main__":
+    select_images_and_generate_patches()

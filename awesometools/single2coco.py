@@ -11,11 +11,11 @@ from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 
 
-def convert2coco(image_fnames, is_train=True):
+def convert2coco(image_fnames, ROOT, is_train=True):
     """ convert every single cells of one image to coco """
     # 总的
     CELL_CLASSES = {'Epithelial': 1, 'Macrophage': 2, 'Neutrophil': 3, 'Lymphocyte': 4}
-
+    IMAGE_PATH = os.path.join(ROOT, 'images')
     coco = {
         "info": [],
         "licenses": [],
